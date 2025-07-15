@@ -88,6 +88,10 @@ def test_worker(worker_script):
     try:
         # Wait for startup
         time.sleep(0.5)
+
+        # Wait for startup message
+        response = client.get_response()
+        print(f"Startup message: {response}")
         
         # Test ping
         print("Testing ping...")

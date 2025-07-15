@@ -6,7 +6,6 @@ Provides a reusable worker framework for handling JSON Lines IPC communication.
 
 import json
 import sys
-import time
 from typing import Dict, Callable, Any, Optional
 
 class JSONLWorker:

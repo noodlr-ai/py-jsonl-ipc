@@ -4,7 +4,7 @@ Example usage of the JSONL IPC Worker library.
 Shows different ways to use the worker in external modules.
 """
 
-from worker import JSONLWorker
+from jsonlipc import JSONLWorker
 
 # Method 1: Using function-based handlers
 def handle_math_add(request_id, params):
