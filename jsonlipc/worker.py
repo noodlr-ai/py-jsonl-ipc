@@ -6,7 +6,11 @@ Provides a reusable worker framework for handling JSON Lines IPC communication.
 
 import json
 import sys
+import os
+import signal
 from typing import Dict, Callable, Any, Optional
+import threading
+import queue
 
 class JSONLWorker:
     """JSON Lines IPC Worker that can be extended with custom handlers."""
@@ -24,6 +28,45 @@ class JSONLWorker:
         
         # Add default handlers
         self.handlers.setdefault("ping", self._default_ping_handler)
+        self.handlers.setdefault("shutdown", self._default_shutdown_handler)
+
+        # Register signal handlers for graceful shutdown
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        
+        # Setup read thread and message queue
+        self.message_queue = queue.Queue()
+        self.reader_thread = None
+
+    # Setup on a separate thread to read from stdin
+    def _stdin_reader(self):
+        """Read from stdin in a separate thread."""
+        try:
+            for line in sys.stdin:
+                if line:
+                    self.message_queue.put(line.strip())
+                else:
+                    break
+        except:
+            pass
+        finally:
+            self.message_queue.put(None)  # Signal EOF
+
+    def _default_shutdown_handler(self, request_id, params):
+        """Default shutdown handler."""
+        self.send_response(request_id, "shutting down")
+        self.stop("Shutdown requested via IPC")
+    
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals."""
+        signal_names = {signal.SIGTERM: "SIGTERM", signal.SIGINT: "SIGINT"}
+        signal_name = signal_names.get(signum, f"signal {signum}")
+        self.stop(f"Received {signal_name}")
+
+    def stop(self, msg: str = "Python worker stopped by parent process"):
+        """Stop the worker."""
+        self.running = False
+        # Note: we can add sys.exit(1) if we want to indicate an error exit on shutdown back to the parent process
     
     def _default_ping_handler(self, request_id, params):
         """Default ping handler."""
@@ -94,30 +137,49 @@ class JSONLWorker:
         else:
             # Ignore other message types
             pass
-    
+
     def run(self):
         """Main worker loop."""
         # Send a startup event
         self.send_event("ready", "Python worker started")
+
+        # Start stdin reader thread
+        self.reader_thread = threading.Thread(target=self._stdin_reader)
+        self.reader_thread.daemon = True
+        self.reader_thread.start()
         
         try:
-            # Read JSON Lines from stdin
-            for line in sys.stdin:
-                line = line.strip()
-                if not line:
-                    continue
-                
+            while self.running:
                 try:
-                    message = json.loads(line)
-                    self.handle_message(message) # Note: this is all synchronous at the moment; it needs to be made asynchronous
-                except json.JSONDecodeError as e:
-                    self.send_event("log", f"JSON decode error: {e}")
-                except Exception as e:
-                    self.send_event("log", f"Error handling message: {e}")
+                    line = self.message_queue.get(timeout=0.1) # timeout allows us to check self.running periodically
+                    
+                    if line is None:  # EOF/shutdown signal
+                        break
+                        
+                    if not line:
+                        continue
+                    
+                    try:
+                        message = json.loads(line)
+                        self.handle_message(message)
+                    except json.JSONDecodeError as e:
+                        self.send_event("log", f"JSON decode error: {e}")
+                    except Exception as e:
+                        self.send_event("log", f"Error handling message: {e}")
+                        
+                except queue.Empty:
+                    continue  # Timeout, check self.running again
         
         except KeyboardInterrupt:
-            pass
-        except EOFError:
-            pass
+            self.stop("KeyboardInterrupt")
         
-        self.send_event("log", "Python worker shutting down")
+        # Signal reader thread to stop
+        self.running = False
+        
+        # Optional: wait briefly for thread cleanup
+        # Note: there is a race condition in the thread where it needs to receive a message to then check if it should stop; therefore,
+        # we let the daemon thread be cleaned up automatically
+        # if self.reader_thread and self.reader_thread.is_alive():
+        #     self.reader_thread.join(timeout=0.5)
+        
+        self.send_event("shutdown", "Worker stopped gracefully")

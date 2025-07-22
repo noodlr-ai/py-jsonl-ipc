@@ -77,8 +77,8 @@ class JSONLClient:
         """Stop the worker process."""
         if self.process:
             self.process.terminate()
-            self.process.wait()
-
+            return self.process.wait() # returns the return code of the process
+        return 0
 
 def test_worker(worker_script):
     """Test the worker with various requests."""
@@ -129,6 +129,12 @@ def test_worker(worker_script):
         response = client.get_response()
         print(f"Unknown method response: {response}")
 
+        # Test graceful shutdown
+        print("\nTesting graceful shutdown...")
+        client.send_request("shutdown")
+        response = client.get_response()
+        print(f"Shutdown response: {response}")
+
         # Wait for any additional messages
         time.sleep(1)
         while True:
@@ -138,7 +144,9 @@ def test_worker(worker_script):
             print(f"Additional message: {msg}")
         
     finally:
-        client.stop_worker()
+        print("\nStopping worker...")
+        code = client.stop_worker()
+        print(f"Worker stopped with exit code: {code}")
 
 
 if __name__ == "__main__":
