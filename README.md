@@ -9,3 +9,9 @@ A reusable Python library for creating JSON Lines Inter-Process Communication (I
 - **Error Handling**: Built-in error handling and JSON-RPC style error responses
 - **Event Support**: Send events to parent processes
 - **Easy Integration**: Simple API for integrating into existing projects
+
+## Pushing New Version
+
+1. Update setup.py with new version number
+2. git tag v0.0.5
+3. git push origin v0.0.5
