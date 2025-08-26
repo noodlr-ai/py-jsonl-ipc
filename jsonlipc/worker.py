@@ -119,12 +119,12 @@ class JSONLWorker:
             }
         })
 
-    def send_event(self, method, params=None):
+    def send_event(self, method, data=None):
         """Send an event message."""
         self.send_message({
             "type": "event",
             "method": method,
-            "params": params
+            "data": data
         })
 
     def handle_request(self, message):
