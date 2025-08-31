@@ -63,12 +63,19 @@ def handle_log_message(request_id, params):
     worker.send_result(request_id, {"status": "logged"})
 
 
+def handle_default(method, request_id, params):
+    """Default handler for unrecognized methods."""
+    worker.send_error(request_id, -32601,
+                      f"(Default Handler) Method not found: {method}")
+
+
 # Create worker with initial handlers
 worker = JSONLWorker({
     "add": handle_math_add,
     "multiply": handle_math_multiply,
     "echo": handle_echo,
-    "log": handle_log_message
+    "log": handle_log_message,
+    "default": handle_default,
 })
 
 # Method 2: Registering handlers after creation

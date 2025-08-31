@@ -17,7 +17,7 @@ A reusable Python library for creating JSON Lines Inter-Process Communication (I
 ```
 {
     id: string;
-    method: stirng;
+    method: string;
     params: any;
 }
 ```
@@ -68,6 +68,10 @@ Error Message
 }
 
 ```
+
+## Testing
+
+`pytest -v test_jsonl_ipc.pyc`
 
 ## Pushing New Version
 

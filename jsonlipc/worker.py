@@ -6,9 +6,8 @@ Provides a reusable worker framework for handling JSON Lines IPC communication.
 
 import json
 import sys
-import os
 import signal
-from typing import Dict, Callable, Any, Optional
+from typing import Dict, Callable, Optional
 import threading
 import queue
 
@@ -138,6 +137,9 @@ class JSONLWorker:
                 self.handlers[method](request_id, params)
             except Exception as e:
                 self.send_error(request_id, -1, f"Handler error: {str(e)}")
+        elif "default" in self.handlers:
+            # the default handler receives the method
+            self.handlers["default"](method, request_id, params)
         else:
             self.send_error(request_id, -32601, f"Method not found: {method}")
 
