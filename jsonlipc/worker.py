@@ -52,7 +52,7 @@ class JSONLWorker:
         finally:
             self.message_queue.put(None)  # Signal EOF
 
-    def _default_shutdown_handler(self, request_id, params):
+    def _default_shutdown_handler(self, method: str, request_id: str, params: dict):
         """Default shutdown handler."""
         self.send_response(request_id, "shutting down")
         self.stop("Shutdown requested via IPC")
@@ -68,7 +68,7 @@ class JSONLWorker:
         self.running = False
         # Note: we can add sys.exit(1) if we want to indicate an error exit on shutdown back to the parent process
 
-    def _default_ping_handler(self, request_id, params):
+    def _default_ping_handler(self, method: str, request_id: str, params: dict):
         """Default ping handler."""
         self.send_response(request_id, "pong")
 
@@ -134,7 +134,7 @@ class JSONLWorker:
 
         if method in self.handlers:
             try:
-                self.handlers[method](request_id, params)
+                self.handlers[method](method, request_id, params)
             except Exception as e:
                 self.send_error(request_id, -1, f"Handler error: {str(e)}")
         elif "default" in self.handlers:

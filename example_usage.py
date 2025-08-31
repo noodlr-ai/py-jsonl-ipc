@@ -9,7 +9,7 @@ from jsonlipc import JSONLWorker
 # Method 1: Using function-based handlers
 
 
-def handle_math_add(request_id, params):
+def handle_math_add(_: str, request_id: str, params: dict):
     """Custom add handler with validation."""
     try:
         a = params.get("a")
@@ -31,7 +31,7 @@ def handle_math_add(request_id, params):
         worker.send_error(request_id, -1, f"Calculation error: {str(e)}")
 
 
-def handle_math_multiply(request_id, params):
+def handle_math_multiply(_: str, request_id: str, params: dict):
     """Custom multiply handler."""
     try:
         a = params.get("a", 1)
@@ -42,12 +42,12 @@ def handle_math_multiply(request_id, params):
         worker.send_error(request_id, -1, str(e))
 
 
-def handle_echo(request_id, params):
+def handle_echo(_: str, request_id: str, params: dict):
     """Echo handler that returns the input parameters."""
     worker.send_result(request_id, params)
 
 
-def handle_log_message(request_id, params):
+def handle_log_message(_: str, request_id: str, params: dict):
     """Log a message and send confirmation."""
     message = params.get("message", "")
     level = params.get("level", "info")
@@ -63,7 +63,7 @@ def handle_log_message(request_id, params):
     worker.send_result(request_id, {"status": "logged"})
 
 
-def handle_default(method, request_id, params):
+def handle_default(method: str, request_id: str, params: dict):
     """Default handler for unrecognized methods."""
     worker.send_error(request_id, -32601,
                       f"(Default Handler) Method not found: {method}")
@@ -81,7 +81,7 @@ worker = JSONLWorker({
 # Method 2: Registering handlers after creation
 
 
-def handle_divide(request_id, params):
+def handle_divide(_: str, request_id: str, params: dict):
     """Division handler with zero-division protection."""
     try:
         a = params.get("a", 0)
