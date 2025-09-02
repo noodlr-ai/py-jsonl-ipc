@@ -40,10 +40,11 @@ class JSONLClient:
         """Read responses from worker in separate thread."""
         while self.process and self.process.poll() is None:
             try:
-                line = self.process.stdout.readline()
-                if line:
-                    message = json.loads(line.strip())
-                    self.message_queue.put(message)
+                if self.process.stdout:
+                    line = self.process.stdout.readline()
+                    if line:
+                        message = json.loads(line.strip())
+                        self.message_queue.put(message)
             except Exception as e:
                 print(f"Error reading response: {e}")
                 break
@@ -59,8 +60,9 @@ class JSONLClient:
         }
 
         json_line = json.dumps(request) + "\n"
-        self.process.stdin.write(json_line)
-        self.process.stdin.flush()
+        if self.process and self.process.stdin:
+            self.process.stdin.write(json_line)
+            self.process.stdin.flush()
 
         return self.request_id
 
@@ -123,7 +125,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data") == 8, "5 + 3 should equal 8"
+        data = response.get("data")
+        assert data.get("kind") == "result", "Response payload should be the result"
+        assert data.get("final") == True, "Response payload should be final"
+        assert data.get("data")["result"] == 8, "5 + 3 should equal 8"
     
     def test_echo_method(self, worker_client):
         """Test the echo method."""
@@ -243,14 +248,17 @@ class TestWorkerScriptValidity:
             time.sleep(0.5)
             
             # The process should exit quickly with an error
-            exit_code = client.process.poll()
-            if exit_code is None:
-                # Wait a bit more if process hasn't exited yet
-                time.sleep(1)
+            if client.process:
                 exit_code = client.process.poll()
+                if exit_code is None:
+                    # Wait a bit more if process hasn't exited yet
+                    time.sleep(1)
+                    exit_code = client.process.poll()
             
-            assert exit_code is not None, "Non-existent script process should exit"
-            assert exit_code != 0, "Non-existent script should exit with error code"
+                assert exit_code is not None, "Non-existent script process should exit"
+                assert exit_code != 0, "Non-existent script should exit with error code"
+            else:
+                raise AssertionError("Process did not start")
             
         finally:
             if client.process:
@@ -318,3 +326,6 @@ class TestWorkerShutdown:
 if __name__ == "__main__":
     # Run pytest when script is executed directly
     pytest.main([__file__, "-v"])
+
+
+# LEFT-OFF: fixing the rest of these tests like with add_method ("data") has a nested ("data") type

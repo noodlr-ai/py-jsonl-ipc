@@ -71,7 +71,7 @@ Error Message
 
 ## Testing
 
-`pytest -v test_jsonl_ipc.pyc`
+`pytest -v test_jsonl_ipc.py`
 
 ## Pushing New Version
 
