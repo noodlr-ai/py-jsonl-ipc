@@ -64,7 +64,7 @@ class JSONLWorker:
 
     def _default_shutdown_handler(self, method: str, request_id: str, params: dict):
         """Default shutdown handler."""
-        self.send_response(request_id, "shutting down")
+        self.send_result(request_id, { "result": "shutting down" })
         self.stop("Shutdown requested via IPC")
 
     def _signal_handler(self, signum, frame):
@@ -80,7 +80,7 @@ class JSONLWorker:
 
     def _default_ping_handler(self, method: str, request_id: str, params: dict):
         """Default ping handler."""
-        self.send_response(request_id, "pong")
+        self.send_result(request_id, { "result": "pong" })
 
     def register_handler(self, method: str, handler: Callable):
         """Register a handler for a specific method."""
@@ -234,7 +234,7 @@ class JSONLWorker:
     def run(self):
         """Main worker loop."""
         # Send a startup event
-        self.send_notification("ready", "Python worker started")
+        self.send_notification(self.session_id, "ready")
 
         # Start stdin reader thread
         self.reader_thread = threading.Thread(target=self._stdin_reader)
@@ -257,9 +257,9 @@ class JSONLWorker:
                         msg = json.loads(line)
                         self.handle_message(msg)
                     except json.JSONDecodeError as e:
-                        self.send_notification("log", f"JSON decode error: {e}")
+                        self.send_notification(self.session_id, "log", { "message": f"JSON decode error: {e}" })
                     except Exception as e:
-                        self.send_notification("log", f"Error handling message: {e}")
+                        self.send_notification(self.session_id, "log", { "message": f"Error handling message: {e}" })
 
                 except queue.Empty:
                     continue  # Timeout, check self.running again
@@ -276,4 +276,4 @@ class JSONLWorker:
         # if self.reader_thread and self.reader_thread.is_alive():
         #     self.reader_thread.join(timeout=0.5)
 
-        self.send_notification("shutdown", "Worker stopped gracefully")
+        self.send_notification(self.session_id, "shutdown")

@@ -69,6 +69,17 @@ Error Message
 
 ```
 
+## Crib Sheet
+
+Use `method` on:
+
+- requests → imperative RPC name (e.g., "pipeline.run").
+- notifications → descriptive topic/event (e.g., "pipeline.progress", "lifecycle.ready").
+
+Do not use method on:
+
+- responses → they’re correlated by id, so method is redundant.
+
 ## Testing
 
 `pytest -v test_jsonl_ipc.py`

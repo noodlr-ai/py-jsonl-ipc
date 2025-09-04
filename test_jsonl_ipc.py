@@ -111,11 +111,14 @@ class TestJSONLIPC:
         """Test the ping method."""
         req_id = worker_client.send_request("ping")
         response = worker_client.get_response()
-        
+        print(response)
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data") == "pong", "Ping should return 'pong'"
+        data = response.get("data")
+        assert data.get("kind") == "result", "Response payload should be the result"
+        assert data.get("final") == True, "Response payload should be final"
+        assert data.get("data")["result"] == "pong", "Ping should return 'pong'"
     
     def test_add_method(self, worker_client):
         """Test the add method."""
@@ -139,7 +142,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data") == test_data, "Echo should return the same data"
+        data = response.get("data")
+        assert data.get("kind") == "result", "Response payload should be the result"
+        assert data.get("final") == True, "Response payload should be final"
+        assert data.get("data")["echo"] == test_data, "Echo should return the same data"
     
     def test_multiply_method(self, worker_client):
         """Test the multiply method."""
@@ -149,7 +155,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data") == 28, "4 * 7 should equal 28"
+        data = response.get("data")
+        assert data.get("kind") == "result", "Response payload should be the result"
+        assert data.get("final") == True, "Response payload should be final"
+        assert data.get("data")["result"] == 28, "4 * 7 should equal 28"
     
     def test_divide_method(self, worker_client):
         """Test the divide method."""
@@ -159,7 +168,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data") == 5, "15 / 3 should equal 5"
+        data = response.get("data")
+        assert data.get("kind") == "result", "Response payload should be the result"
+        assert data.get("final") == True, "Response payload should be final"
+        assert data.get("data")["result"] == 5, "15 / 3 should equal 5"
     
     def test_default_handler_unknown_method(self, worker_client):
         """Test the default handler with an unknown method."""
@@ -167,11 +179,10 @@ class TestJSONLIPC:
         response = worker_client.get_response()
         
         assert response is not None, "Should receive a response"
-        assert response.get("type") == "error", "Should be an error message"
+        assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        
         error = response.get("error", {})
-        assert error.get("code") == -32601, "Should return 'method not found' error code"
+        assert error.get("code") == "methodNotFound", "Should return 'methodNotFound' error code"
         assert "unknown_method" in error.get("message", ""), "Error message should mention the method"
     
     def test_default_handler_consistency(self, worker_client):
@@ -180,11 +191,11 @@ class TestJSONLIPC:
         response = worker_client.get_response()
         
         assert response is not None, "Should receive a response"
-        assert response.get("type") == "error", "Should be an error message"
+        assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
         
         error = response.get("error", {})
-        assert error.get("code") == -32601, "Should return 'method not found' error code"
+        assert error.get("code") == "methodNotFound", "Should return 'methodNotFound' error code"
         assert "nonexistent_function" in error.get("message", ""), "Error message should mention the method"
     
     def test_add_method_validation_missing_params(self, worker_client):
@@ -193,11 +204,11 @@ class TestJSONLIPC:
         response = worker_client.get_response()
         
         assert response is not None, "Should receive a response"
-        assert response.get("type") == "error", "Should be an error message"
+        assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
         
         error = response.get("error", {})
-        assert error.get("code") == -32602, "Should return 'invalid params' error code"
+        assert error.get("code") == "invalidParameters", "Should return 'invalidParameters' error code"
     
     def test_add_method_validation_invalid_types(self, worker_client):
         """Test add method with invalid parameter types."""
@@ -205,11 +216,11 @@ class TestJSONLIPC:
         response = worker_client.get_response()
         
         assert response is not None, "Should receive a response"
-        assert response.get("type") == "error", "Should be an error message"
+        assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
         
         error = response.get("error", {})
-        assert error.get("code") == -32602, "Should return 'invalid params' error code"
+        assert error.get("code") == "invalidParameters", "Should return 'invalidParameters' error code"
 
 
 class TestWorkerScriptValidity:
@@ -225,8 +236,9 @@ class TestWorkerScriptValidity:
             
             # Check for startup message
             response = client.get_response()
+            print(response)
             assert response is not None, "Should receive startup message"
-            assert response.get("type") == "event", "Startup should be an event"
+            assert response.get("type") == "notification", "Startup should be an event"
             assert response.get("method") == "ready", "Should be a ready event"
             
             # Test a simple ping to verify it's working
@@ -234,7 +246,11 @@ class TestWorkerScriptValidity:
             response = client.get_response()
             assert response is not None, "Should receive ping response"
             assert response.get("type") == "response", "Should be a response message"
-            assert response.get("data") == "pong", "Ping should return 'pong'"
+            assert response.get("id") == req_id, "Response ID should match request ID"
+            data = response.get("data")
+            assert data.get("kind") == "result", "Response payload should be the result"
+            assert data.get("final") == True, "Response payload should be final"
+            assert data.get("data")["result"] == "pong", "Ping should return 'pong' "
             
         finally:
             client.stop_worker()
@@ -309,14 +325,15 @@ class TestWorkerShutdown:
             req_id = client.send_request("shutdown")
             response = client.get_response()
             
+            # Wait for shutdown response
             assert response is not None, "Should receive shutdown response"
             assert response.get("type") == "response", "Should be a response message"
             assert response.get("id") == req_id, "Response ID should match request ID"
             
-            # Wait for shutdown event
+            # Wait for shutdown notification
             shutdown_event = client.get_response()
             assert shutdown_event is not None, "Should receive shutdown event"
-            assert shutdown_event.get("type") == "event", "Should be an event message"
+            assert shutdown_event.get("type") == "notification", "Should be an event message"
             assert shutdown_event.get("method") == "shutdown", "Should be a shutdown event"
             
         finally:
@@ -326,6 +343,3 @@ class TestWorkerShutdown:
 if __name__ == "__main__":
     # Run pytest when script is executed directly
     pytest.main([__file__, "-v"])
-
-
-# LEFT-OFF: fixing the rest of these tests like with add_method ("data") has a nested ("data") type
