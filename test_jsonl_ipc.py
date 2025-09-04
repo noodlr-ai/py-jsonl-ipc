@@ -125,10 +125,7 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        data = response.get("data")
-        assert data.get("kind") == "result", "Response payload should be the result"
-        assert data.get("final") == True, "Response payload should be final"
-        assert data.get("data")["result"] == 8, "5 + 3 should equal 8"
+        assert response.get("data")["result"] == 8, "5 + 3 should equal 8"
     
     def test_echo_method(self, worker_client):
         """Test the echo method."""
@@ -139,10 +136,7 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        data = response.get("data")
-        assert data.get("kind") == "result", "Response payload should be the result"
-        assert data.get("final") == True, "Response payload should be final"
-        assert data.get("data")["echo"] == test_data, "Echo should return the same data"
+        assert response.get("data")["echo"] == test_data, "Echo should return the same data"
     
     def test_multiply_method(self, worker_client):
         """Test the multiply method."""
@@ -152,10 +146,7 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        data = response.get("data")
-        assert data.get("kind") == "result", "Response payload should be the result"
-        assert data.get("final") == True, "Response payload should be final"
-        assert data.get("data")["result"] == 28, "4 * 7 should equal 28"
+        assert response.get("data")["result"] == 28, "4 * 7 should equal 28"
     
     def test_divide_method(self, worker_client):
         """Test the divide method."""
@@ -165,10 +156,7 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        data = response.get("data")
-        assert data.get("kind") == "result", "Response payload should be the result"
-        assert data.get("final") == True, "Response payload should be final"
-        assert data.get("data")["result"] == 5, "15 / 3 should equal 5"
+        assert response.get("data")["result"] == 5, "15 / 3 should equal 5"
     
     def test_default_handler_unknown_method(self, worker_client):
         """Test the default handler with an unknown method."""

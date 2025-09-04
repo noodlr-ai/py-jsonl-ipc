@@ -26,7 +26,7 @@ def handle_math_add(_: str, request_id: str, params: dict):
             return
 
         result = a + b
-        worker.send_result(request_id, { "result": result })
+        worker.send_response(request_id, { "result": result })
     except Exception as e:
         worker.send_transport_error(request_id, "internalError", f"Calculation error: {str(e)}")
 
@@ -37,14 +37,14 @@ def handle_math_multiply(_: str, request_id: str, params: dict):
         a = params.get("a", 1)
         b = params.get("b", 1)
         result = a * b
-        worker.send_result(request_id, { "result": result })
+        worker.send_response(request_id, { "result": result })
     except Exception as e:
         worker.send_transport_error(request_id, "internalError", str(e))
 
 
 def handle_echo(_: str, request_id: str, params: dict):
     """Echo handler that returns the input parameters."""
-    worker.send_result(request_id, { "echo": params })
+    worker.send_response(request_id, { "echo": params })
 
 
 def handle_log_message(_: str, request_id: str, params: dict):
@@ -60,7 +60,7 @@ def handle_log_message(_: str, request_id: str, params: dict):
     })
 
     # Send response
-    worker.send_result(request_id, {"status": "logged"})
+    worker.send_response(request_id, {"status": "logged"})
 
 
 def handle_default(method: str, request_id: str, params: dict):
@@ -92,7 +92,7 @@ def handle_divide(_: str, request_id: str, params: dict):
             return
 
         result = a / b
-        worker.send_result(request_id, { "result": result })
+        worker.send_response(request_id, { "result": result })
     except Exception as e:
         worker.send_transport_error(request_id, "internalError", str(e))
 
