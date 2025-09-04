@@ -64,7 +64,7 @@ class JSONLWorker:
 
     def _default_shutdown_handler(self, method: str, request_id: str, params: dict):
         """Default shutdown handler."""
-        self.send_result(request_id, { "result": "shutting down" })
+        self.send_response(request_id, { "result": "shutting down" })
         self.stop("Shutdown requested via IPC")
 
     def _signal_handler(self, signum, frame):
@@ -80,7 +80,7 @@ class JSONLWorker:
 
     def _default_ping_handler(self, method: str, request_id: str, params: dict):
         """Default ping handler."""
-        self.send_result(request_id, { "result": "pong" })
+        self.send_response(request_id, { "result": "pong" })
 
     def register_handler(self, method: str, handler: Callable):
         """Register a handler for a specific method."""

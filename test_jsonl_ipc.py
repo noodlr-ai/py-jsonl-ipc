@@ -115,10 +115,7 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        data = response.get("data")
-        assert data.get("kind") == "result", "Response payload should be the result"
-        assert data.get("final") == True, "Response payload should be final"
-        assert data.get("data")["result"] == "pong", "Ping should return 'pong'"
+        assert response.get("data")["result"] == "pong", "Ping should return 'pong'"
     
     def test_add_method(self, worker_client):
         """Test the add method."""
@@ -236,7 +233,6 @@ class TestWorkerScriptValidity:
             
             # Check for startup message
             response = client.get_response()
-            print(response)
             assert response is not None, "Should receive startup message"
             assert response.get("type") == "notification", "Startup should be an event"
             assert response.get("method") == "ready", "Should be a ready event"
@@ -247,10 +243,7 @@ class TestWorkerScriptValidity:
             assert response is not None, "Should receive ping response"
             assert response.get("type") == "response", "Should be a response message"
             assert response.get("id") == req_id, "Response ID should match request ID"
-            data = response.get("data")
-            assert data.get("kind") == "result", "Response payload should be the result"
-            assert data.get("final") == True, "Response payload should be final"
-            assert data.get("data")["result"] == "pong", "Ping should return 'pong' "
+            assert response.get("data")["result"] == "pong", "Ping should return 'pong' "
             
         finally:
             client.stop_worker()
