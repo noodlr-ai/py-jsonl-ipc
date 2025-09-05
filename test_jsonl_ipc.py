@@ -121,11 +121,13 @@ class TestJSONLIPC:
         """Test the add method."""
         req_id = worker_client.send_request("add", {"a": 5, "b": 3})
         response = worker_client.get_response()
-        
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data")["result"] == 8, "5 + 3 should equal 8"
+        data = response.get("data")
+        assert data["final"] == True, "Final flag should be True"
+        payload = data.get("data")
+        assert payload["result"] == 8, "5 + 3 should equal 8"
     
     def test_echo_method(self, worker_client):
         """Test the echo method."""
@@ -136,7 +138,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data")["echo"] == test_data, "Echo should return the same data"
+        data = response.get("data")
+        assert data["final"] == True, "Final flag should be True"
+        payload = data.get("data")
+        assert payload["echo"] == test_data, "Echo should return the same data"
     
     def test_multiply_method(self, worker_client):
         """Test the multiply method."""
@@ -146,7 +151,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data")["result"] == 28, "4 * 7 should equal 28"
+        data = response.get("data")
+        assert data["final"] == True, "Final flag should be True"
+        payload = data.get("data")
+        assert payload["result"] == 28, "4 * 7 should equal 28"
     
     def test_divide_method(self, worker_client):
         """Test the divide method."""
@@ -156,7 +164,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data")["result"] == 5, "15 / 3 should equal 5"
+        data = response.get("data")
+        assert data["final"] == True, "Final flag should be True"
+        payload = data.get("data")
+        assert payload["result"] == 5, "15 / 3 should equal 5"
     
     def test_default_handler_unknown_method(self, worker_client):
         """Test the default handler with an unknown method."""
@@ -166,9 +177,11 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        error = response.get("error", {})
-        assert error.get("code") == "methodNotFound", "Should return 'methodNotFound' error code"
-        assert "unknown_method" in error.get("message", ""), "Error message should mention the method"
+        data = response.get("data")
+        assert data["kind"] == "error", "Kind should return 'error'"
+        err = data.get("error")
+        assert err.get("code") == "methodNotFound", "Should return 'methodNotFound' error code"
+        assert "unknown_method" in err.get("message", ""), "Error message should mention the method"
     
     def test_default_handler_consistency(self, worker_client):
         """Test that the default handler works consistently for different unknown methods."""
@@ -179,9 +192,11 @@ class TestJSONLIPC:
         assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
         
-        error = response.get("error", {})
-        assert error.get("code") == "methodNotFound", "Should return 'methodNotFound' error code"
-        assert "nonexistent_function" in error.get("message", ""), "Error message should mention the method"
+        data = response.get("data")
+        assert data["kind"] == "error", "Kind should return 'error'"
+        err = data.get("error")
+        assert err.get("code") == "methodNotFound", "Should return 'methodNotFound' error code"
+        assert "nonexistent_function" in err.get("message", ""), "Error message should mention the method"
     
     def test_add_method_validation_missing_params(self, worker_client):
         """Test add method with missing parameters."""
@@ -191,10 +206,12 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
+
+        data = response.get("data")
+        assert data["kind"] == "error", "Kind should return 'error'"
+        err = data.get("error")
+        assert err.get("code") == "invalidParameters", "Should return 'invalidParameters' error code"
         
-        error = response.get("error", {})
-        assert error.get("code") == "invalidParameters", "Should return 'invalidParameters' error code"
-    
     def test_add_method_validation_invalid_types(self, worker_client):
         """Test add method with invalid parameter types."""
         req_id = worker_client.send_request("add", {"a": "not_a_number", "b": 3})
@@ -204,9 +221,10 @@ class TestJSONLIPC:
         assert response.get("type") == "response", "Should be an error message"
         assert response.get("id") == req_id, "Response ID should match request ID"
         
-        error = response.get("error", {})
-        assert error.get("code") == "invalidParameters", "Should return 'invalidParameters' error code"
-
+        data = response.get("data")
+        assert data["kind"] == "error", "Kind should return 'error'"
+        err = data.get("error")
+        assert err.get("code") == "invalidParameters", "Should return 'invalidParameters' error code"
 
 class TestWorkerScriptValidity:
     """Test class for worker script validation."""
