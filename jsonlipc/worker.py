@@ -45,7 +45,7 @@ class JSONLWorker:
         # Generate timestamp-based session ID at nanosecond precision
         self.session_id = f"sess_{int(time.time_ns())}"
         self.seq = 0
-        self.data_schema = "message/v1"
+        self.schema = "message/v1"
         self._req_seq: dict[str, int] = {}  # per-request envelope seq
 
     # Setup on a separate thread to read from stdin
@@ -96,7 +96,7 @@ class JSONLWorker:
         self.seq += 1
         msg.setdefault("ts", utcnow())
         msg.setdefault("seq", self.seq)
-        msg.setdefault("data_schema", self.data_schema)
+        msg.setdefault("schema", self.schema)
         json_line = json.dumps(msg)
         print(json_line, flush=True)
 
@@ -149,7 +149,7 @@ class JSONLWorker:
                     data=None, progress: dict | None = None, error: dict | None = None,
                     final: bool = False, status: str | None = None, warnings: list | None = None):
         env = {
-            "version": "envelope/v1",
+            "schema": "envelope/v1",
             "request_id": request_id,
             "kind": kind,
             "seq": self._next_req_seq(request_id),   # per-request sequence
@@ -165,7 +165,7 @@ class JSONLWorker:
     
     def _make_simple_envelope(self, request_id: str, *, kind: str, data: dict[str, Any] | None = None, error: dict[str, Any] | None = None, warnings: list[dict[str, Any]] | None = None, final: bool = False):
         env: dict[str, Any] = {
-            "version": "envelope/v1",
+            "schema": "envelope/v1",
             "request_id": request_id,
             "kind": kind,
         }
@@ -178,7 +178,7 @@ class JSONLWorker:
     def _make_notification_envelope(self, kind: str, data: dict[str, Any] | None = None, error: dict[str, Any] | None = None, warnings: list[dict[str, Any]] | None = None):
         """Notification envelope does not include the request_id or final"""
         env: dict[str, Any] = {
-            "version": "envelope/v1",
+            "schema": "envelope/v1",
             "kind": kind,
         }
         if data is not None: env["data"] = data
