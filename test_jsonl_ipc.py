@@ -115,7 +115,10 @@ class TestJSONLIPC:
         assert response is not None, "Should receive a response"
         assert response.get("type") == "response", "Should be a response message"
         assert response.get("id") == req_id, "Response ID should match request ID"
-        assert response.get("data")["result"] == "pong", "Ping should return 'pong'"
+        data = response.get("data")
+        assert data["final"] == True, "Final flag should be True"
+        payload = data.get("data")
+        assert payload["result"] == "pong", "Ping should return 'pong'"
     
     def test_add_method(self, worker_client):
         """Test the add method."""
@@ -249,7 +252,10 @@ class TestWorkerScriptValidity:
             assert response is not None, "Should receive ping response"
             assert response.get("type") == "response", "Should be a response message"
             assert response.get("id") == req_id, "Response ID should match request ID"
-            assert response.get("data")["result"] == "pong", "Ping should return 'pong' "
+            data = response.get("data")
+            assert data["final"] == True, "Final flag should be True"
+            payload = data.get("data")
+            assert payload["result"] == "pong", "Ping should return 'pong'"
             
         finally:
             client.stop_worker()
@@ -328,6 +334,10 @@ class TestWorkerShutdown:
             assert response is not None, "Should receive shutdown response"
             assert response.get("type") == "response", "Should be a response message"
             assert response.get("id") == req_id, "Response ID should match request ID"
+            data = response.get("data")
+            assert data["final"] == True, "Final flag should be True"
+            payload = data.get("data")
+            assert payload["result"] == "shutting down", "Shutdown should return 'shutting down'"
             
             # Wait for shutdown notification
             shutdown_event = client.get_response()
