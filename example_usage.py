@@ -9,6 +9,11 @@ from jsonlipc import JSONLWorker
 # Method 1: Using function-based handlers
 
 
+# LEFT-OFF: This doesn't currently have anywhere close to full test converage; the engine is closer, but I should be testing the major functionality here
+# LEFT-OFF: turn the handlers into pure functions
+# LEFT-OFF: add tests for progress events, notifications, etc.
+
+
 def handle_math_add(_: str, request_id: str, params: dict):
     """Custom add handler with validation."""
     try:
@@ -26,9 +31,10 @@ def handle_math_add(_: str, request_id: str, params: dict):
             return
 
         result = a + b
-        worker.send_result(request_id, { "result": result })
+        worker.send_result(request_id, {"result": result})
     except Exception as e:
-        worker.send_error(request_id, "internalError", f"Calculation error: {str(e)}")
+        worker.send_error(request_id, "internalError",
+                          f"Calculation error: {str(e)}")
 
 
 def handle_math_multiply(_: str, request_id: str, params: dict):
@@ -37,14 +43,14 @@ def handle_math_multiply(_: str, request_id: str, params: dict):
         a = params.get("a", 1)
         b = params.get("b", 1)
         result = a * b
-        worker.send_result(request_id, { "result": result })
+        worker.send_result(request_id, {"result": result})
     except Exception as e:
         worker.send_error(request_id, "internalError", str(e))
 
 
 def handle_echo(_: str, request_id: str, params: dict):
     """Echo handler that returns the input parameters."""
-    worker.send_result(request_id, { "echo": params })
+    worker.send_result(request_id, {"echo": params})
 
 
 def handle_log_message(_: str, request_id: str, params: dict):
@@ -92,7 +98,7 @@ def handle_divide(_: str, request_id: str, params: dict):
             return
 
         result = a / b
-        worker.send_result(request_id, { "result": result })
+        worker.send_result(request_id, {"result": result})
     except Exception as e:
         worker.send_error(request_id, "internalError", str(e))
 

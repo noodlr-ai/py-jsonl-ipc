@@ -7,14 +7,28 @@ Provides a reusable worker framework for handling JSON Lines IPC communication.
 import json
 import sys
 import signal
-from typing import Dict, Callable, Optional, Any
+from typing import Dict, Callable, Optional, Any, TypeVar
 import threading
 import queue
 import time
-from datetime import datetime, timezone
 
-def utcnow():
-    return datetime.now(timezone.utc).isoformat()
+from .envelopes import (
+    make_error_code,
+    make_log_message,
+    make_result_envelope,
+    make_error_envelope,
+    make_progress_envelope,
+    make_log_envelope,
+    make_log_error_envelope,
+    utcnow,
+    ResultEnvelope,
+    ErrorEnvelope,
+    ProgressEnvelope,
+    LogEnvelope,
+    LogMessage,
+    ErrorCode,
+)
+
 
 class JSONLWorker:
     """JSON Lines IPC Worker that can be extended with custom handlers."""
@@ -64,7 +78,8 @@ class JSONLWorker:
 
     def _default_shutdown_handler(self, method: str, request_id: str, params: dict):
         """Default shutdown handler."""
-        self.send_result(request_id, { "result": "shutting down" })
+        env = make_result_envelope(request_id, {"result": "shutting down"})
+        self.send_result(request_id, env)
         self.stop("Shutdown requested via IPC")
 
     def _signal_handler(self, signum, frame):
@@ -80,7 +95,8 @@ class JSONLWorker:
 
     def _default_ping_handler(self, method: str, request_id: str, params: dict):
         """Default ping handler."""
-        self.send_result(request_id, { "result": "pong" })
+        env = make_result_envelope(request_id, {"result": "pong"})
+        self.send_result(request_id, env)
 
     def register_handler(self, method: str, handler: Callable):
         """Register a handler for a specific method."""
@@ -108,15 +124,6 @@ class JSONLWorker:
             "data": data
         })
 
-    def _send_transport_error(self, request_id, code: str, message: str, details: dict | None = None):
-        """Send an error message."""
-        err = self.make_error_code(code, message, details)
-        self._send_message({
-            "id": request_id,
-            "type": "response",
-            "error": err
-        })
-
     def _send_notification(self, id: str, method: str, data: Any = None):
         """Send a notification message."""
         self._send_message({
@@ -126,112 +133,111 @@ class JSONLWorker:
             "data": data
         })
 
-    # ---------- transport warnings (top-level) ----------
-    @staticmethod
-    def make_transport_warning(code: str, message: str, *, level: str = "warn", details: dict[str, Any] | None = None) -> dict:
-        tw: dict[str, Any] = {"code": code, "level": level, "message": message}
-        if details is not None: tw["details"] = details
-        return tw
+    # ---------------------- Session Method Wrappers ---------------------------
+    # Note: These methods should only be called by the session worker internally
+    def _send_session_error(self, err: ErrorCode):
+        """Send session error."""
+        self._send_message({
+            "id": self.session_id,
+            "type": "notification",
+            "method": "error",
+            "error": err
+        })
 
-    def _send_transport_warning_notify(self, request_id: str, code: str, message: str, method: str, level: str = "warn",
-                                      details: dict[str, Any] | None = None):
-        """Send a notification that carries ONLY transport warnings (no app payload)."""
-        tw = self.make_transport_warning(code, message, level=level, details=details)
-        self._send_notification(request_id, method, tw)
+    def _send_request_error(self, request_id: str, err: ErrorCode):
+        """Send request error."""
+        self._send_message({
+            "id": request_id,
+            "type": "response",
+            "error": err
+        })
 
-    
-    # ---------- notification helpers ----------
+    def _send_session_warnings(self, warnings: list[LogMessage]):
+        """Send session warnings."""
+        self._send_message({
+            "id": self.session_id,
+            "type": "response",
+            "warnings": warnings
+        })
+
+    def _send_request_warnings(self, request_id: str, warnings: list[LogMessage]):
+        """Send request warnings."""
+        self._send_message({
+            "id": request_id,
+            "type": "response",
+            "warnings": warnings
+        })
+
+    def _send_session_log(self, envelope: LogEnvelope):
+        """Send a session log message."""
+        self._send_notification(self.session_id, "log", envelope)
+
+    # ---------------------- Application Method Wrappers ----------------------
+    # Note: These methods are how the application communicates with the worker
+
     def _next_req_seq(self, request_id: str) -> int:
         self._req_seq[request_id] = self._req_seq.get(request_id, 0) + 1
         return self._req_seq[request_id]
 
-    def _make_envelope(self, request_id: str, *, kind: str,
-                    data=None, progress: dict | None = None, error: dict | None = None,
-                    final: bool = False, status: str | None = None, warnings: list | None = None):
-        env = {
-            "schema": "envelope/v1",
-            "request_id": request_id,
-            "kind": kind,
-            "seq": self._next_req_seq(request_id),   # per-request sequence
-            "ts": utcnow(),
-        }
-        if data is not None: env["data"] = data
-        if progress is not None: env["progress"] = progress
-        if error is not None: env["error"] = error
-        if final: env["final"] = True
-        if status: env["status"] = status
-        if warnings: env["warnings"] = warnings
-        return env
-    
-    def _make_simple_envelope(self, request_id: str, *, kind: str, data: dict[str, Any] | None = None, error: dict[str, Any] | None = None, warnings: list[dict[str, Any]] | None = None, final: bool = False):
-        env: dict[str, Any] = {
-            "schema": "envelope/v1",
-            "request_id": request_id,
-            "kind": kind,
-        }
-        if data is not None: env["data"] = data
-        if error is not None: env["error"] = error
-        if final: env["final"] = True
-        if warnings: env["warnings"] = warnings
-        return env
-    
-    def _make_notification_envelope(self, kind: str, data: dict[str, Any] | None = None, error: dict[str, Any] | None = None, warnings: list[dict[str, Any]] | None = None):
-        """Notification envelope does not include the request_id or final"""
-        env: dict[str, Any] = {
-            "schema": "envelope/v1",
-            "kind": kind,
-        }
-        if data is not None: env["data"] = data
-        if error is not None: env["error"] = error
-        if warnings: env["warnings"] = warnings
-        return env
+    T = TypeVar('T', bound=ProgressEnvelope | ResultEnvelope | LogEnvelope)
 
-    @staticmethod
-    def make_error_code(code: str, message: str, details: dict[str, Any] | None = None) -> dict:
-        err: dict[str, Any] = {"code": code, "message": message}
-        if details is not None: err["details"] = details
-        return err
-    
-    @staticmethod
-    def make_app_warning(code: str, message: str, details: dict[str, Any] | None = None) -> dict:
-        aw: dict[str, Any] = {"code": code, "message": message}
-        if details is not None: aw["details"] = details
-        return aw
+    def _inject_seq(self, request_id: str, envelope: T) -> T:
+        """Add sequence number to envelope if it has a request_id (i.e., it's request-scoped)."""
+        if "request_id" in envelope:
+            envelope["seq"] = self._next_req_seq(request_id)
+        return envelope
 
-    # ---- app warnings in NOTIFICATIONS (non-terminal) ----
-    def send_warning_notify(self, request_id: str, method: str, code: str, message: str, details: dict[str, Any] | None = None, status: str | None = "running"):
-        """Application warning while work continues (e.g., '12 rows skipped')."""
-        warn = self.make_app_warning(code, message, details=details)
-        env = self._make_envelope(request_id, kind="log", warnings=[warn], status=status)
-        self._send_notification(request_id, method, data=env)
+    # RESPONSES (request-specific, terminal errors)
+
+    def send_result(self, request_id: str, envelope: ResultEnvelope):
+        """Application final/partial result"""
+        envelope = self._inject_seq(request_id, envelope)
+        self._send_response(request_id, envelope)
+
+    def send_error(self, request_id: str, envelope: ErrorEnvelope):
+        """Application Error"""
+        self._send_response(request_id, envelope)
+
+    # NOTIFICATIONS (information, warnings, non-terminal terminal errors)
+    def send_log(self, envelope: LogEnvelope, method: str = "log"):
+        """Application Log"""
+        id = envelope.get("request_id", self.session_id)
+        if "request_id" in envelope:
+            envelope = self._inject_seq(id, envelope)
+        self._send_notification(id, method, envelope)
+
+    def send_progress(self, request_id: str, envelope: ProgressEnvelope, method: str = "progress") -> None:
+        """Application Progress"""
+        envelope = self._inject_seq(request_id, envelope)
+        self._send_notification(request_id, method, data=envelope)
+
+    # def send_warning_notify(self, request_id: str, method: str, code: str, message: str, details: dict[str, Any] | None = None, status: str | None = "running"):
+    #     """Application warning while work continues (e.g., '12 rows skipped')."""
+    #     warn = self.make_app_warning(code, message, details=details)
+    #     env = self._make_envelope(
+    #         request_id, kind="log", warnings=[warn], status=status)
+    #     self._send_notification(request_id, method, data=env)
 
     # Convenience wrappers for common envelope messages
-    def send_notification(self, method: str, kind: str, data=None, error: dict[str, Any] | None = None, warnings: list[dict] | None = None):
-        """Application-level notifications"""
-        env = self._make_notification_envelope(kind, data=data, error=error, warnings=warnings)
-        self._send_notification(self.session_id, method, data=env)
+    # def send_notification(self, method: str, kind: str, data=None, error: dict[str, Any] | None = None, warnings: list[dict] | None = None):
+    #     """Application-level notifications"""
+    #     env = self._make_notification_envelope(
+    #         kind, data=data, error=error, warnings=warnings)
+    #     self._send_notification(self.session_id, method, data=env)
 
-    def send_progress(self, request_id: str, method: str, progress_data: dict[str, Any], status: str | None = "running", warnings: list[dict] | None = None):
-        """Application-level progress payload (see send_result for sending results)"""
-        env = self._make_envelope(request_id, kind="progress", progress=progress_data, status=status, warnings=warnings)
-        self._send_notification(request_id, method, data=env)
+    # def send_error(self, request_id: str, code: str, message: str, details: dict[str, Any] | None = None, warnings: list[dict] | None = None):
+    #     """Application-level terminal error (ends the request): RESPONSE with envelope kind=error."""
+    #     err = self.make_error_code(code, message, details)
+    #     env = self._make_envelope(
+    #         request_id, kind="error", error=err, final=True, status="failed", warnings=warnings)
+    #     self._send_response(request_id, env)
 
-    def send_result(self, request_id: str, result_data: dict[str, Any], final: bool = True, warnings: list[dict] | None = None):
-        """Final (or intermediate) result as a RESPONSE with envelope payload."""
-        env = self._make_envelope(request_id, kind="result", data=result_data, final=final, warnings=warnings)
-        self._send_response(request_id, env)
-
-    def send_error(self, request_id: str, code: str, message: str, details: dict[str, Any] | None = None, warnings: list[dict] | None = None):
-        """Application-level terminal error (ends the request): RESPONSE with envelope kind=error."""
-        err = self.make_error_code(code, message, details)
-        env = self._make_envelope(request_id, kind="error", error=err, final=True, status="failed", warnings=warnings)
-        self._send_response(request_id, env)
-
-    def send_error_notify(self, request_id: str, method: str, code: str, message: str, details: dict | None = None, status: str | None = None):
-        """Application-level non-terminal error (e.g., a node fails but pipeline continues): NOTIFICATION."""
-        err = self.make_app_warning(code, message, details)
-        env = self._make_envelope(request_id, kind="error", error=err, final=False, status=status)
-        self._send_notification(request_id, method, data=env)
+    # def send_error_notify(self, request_id: str, method: str, code: str, message: str, details: dict | None = None, status: str | None = None):
+    #     """Application-level non-terminal error (e.g., a node fails but pipeline continues): NOTIFICATION."""
+    #     err = self.make_app_warning(code, message, details)
+    #     env = self._make_envelope(
+    #         request_id, kind="error", error=err, final=False, status=status)
+    #     self._send_notification(request_id, method, data=env)
 
     def handle_request(self, message):
         """Handle incoming request using registered handlers."""
@@ -243,12 +249,14 @@ class JSONLWorker:
             try:
                 self.handlers[method](method, request_id, params)
             except Exception as e:
-                self._send_transport_error(request_id, "handlerError", f"Handler error: {str(e)}")
+                self._send_request_error(
+                    request_id, make_error_code("handleError", f"Handler error: {str(e)}"))
         elif "default" in self.handlers:
             # the default handler receives the method
             self.handlers["default"](method, request_id, params)
         else:
-            self._send_transport_error(request_id, "methodNotFound", f"Method not found: {method}")
+            self._send_request_error(
+                request_id, make_error_code("methodNotFound", f"Method not found: {method}"))
 
     def handle_message(self, message):
         """Handle incoming message."""
@@ -286,9 +294,11 @@ class JSONLWorker:
                         msg = json.loads(line)
                         self.handle_message(msg)
                     except json.JSONDecodeError as e:
-                        self._send_notification(self.session_id, "log", { "message": f"JSON decode error: {e}" })
+                        self._send_session_error(make_error_code(
+                            "invalidJSON", f"JSON decode error: {e}"))
                     except Exception as e:
-                        self._send_notification(self.session_id, "log", { "message": f"Error handling message: {e}" })
+                        self._send_session_error(make_error_code(
+                            "internalError", f"Internal error: {e}"))
 
                 except queue.Empty:
                     continue  # Timeout, check self.running again

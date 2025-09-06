@@ -80,6 +80,27 @@ Do not use method on:
 
 - responses → they’re correlated by id, so method is redundant.
 
+All `messages` and `envelopes` send a timestamp. The `message` timestamp tells us when the message was sent, while the `envelope` timestamp tells us when
+the business logic actually created the envelope.
+
+The message `error` property is only set by the worker internally, all errors from the application are sent as a `data` payload
+The message `warning` property is only set by the worker internally, all warnings from the application are sent as a `data` payload
+
+**Response vs Notification Guidelines**
+
+Use "response" for:
+
+- Request-scoped messages that are directly answering a specific request
+- Terminal messages that end a request (final results, errors)
+- Partial results for long-running requests
+
+Use "notification" for:
+
+- Unsolicited updates not tied to a specific request
+- Progress updates during request processing
+- Log messages that are informational
+- Events that happen independently of requests
+
 ## Testing
 
 `pytest -v test_jsonl_ipc.py`
@@ -89,3 +110,8 @@ Do not use method on:
 1. Update setup.py with new version number
 2. git tag v0.0.5
 3. git push origin v0.0.5
+
+## Retag
+
+1. git tag -f v0.0.5
+2. git push origin v0.0.5 --force
