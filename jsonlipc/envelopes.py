@@ -1,14 +1,9 @@
 """
 JSON Lines IPC Envelope Utilities
-Shared functions for creating envelopes and error/warning structures.
+Shared functions for creating envelopes and error/log structures.
 """
 
-# LEFT-OFF: All envelopes will now have a timestamp
-# LEFT-OFF: Finish implementing the rest of the envelope types and functions
-# LEFT-OFF: Updating worker to use the imported make_envelope methods
-# LEFT-OFF: publishing the package and importing the make_envelope methods into the py-engine
-
-from typing import TypedDict, Any, Literal, Required, NotRequired, Optional
+from typing import TypedDict, Any, Literal, NotRequired, Optional
 from datetime import datetime, timezone
 
 EnvelopeKind = Literal["started", "progress", "result", "error", "log"]
@@ -21,14 +16,14 @@ class ErrorCode(TypedDict):
     code: str
     message: str
     # Optional properties
-    details: Optional[dict[str, Any]]
+    details: NotRequired[dict[str, Any]]
 
 
 class LogMessage(TypedDict):
     level: LogLevel
     message: str
     # Optional properties
-    details: Optional[dict[str, Any] | ErrorCode]
+    details: NotRequired[dict[str, Any] | ErrorCode]
 
 
 class ProgressData(TypedDict):
@@ -49,7 +44,7 @@ class ResultEnvelope(TypedDict):
     ts: str
     data: dict[str, Any]
     final: bool
-    warnings: list[LogMessage]
+    messages: list[LogMessage]
     # Optional properties
     # Will be injected by the worker (useful for sending partial results as multiple messages)
     seq: NotRequired[int]
@@ -63,7 +58,7 @@ class ErrorEnvelope(TypedDict):
     error: ErrorCode
     final: bool
     status: Status
-    warnings: list[LogMessage]
+    messages: list[LogMessage]
     # Optional properties
     details: NotRequired[dict[str, Any]]
     seq: NotRequired[int]  # Will be injected by the worker
@@ -86,7 +81,7 @@ class ProgressEnvelope(TypedDict):
     ts: str
     progress: ProgressData
     status: Status
-    warnings: list[LogMessage]
+    messages: list[LogMessage]
     # Optional properties
     seq: NotRequired[int]  # Will be injected by the worker
 
@@ -136,20 +131,24 @@ def utcnow():
 
 def make_error_code(code: str, message: str, details: Optional[dict[str, Any]] = None) -> ErrorCode:
     """Create a standardized error structure."""
-    return {
+    error_code: ErrorCode = {
         "code": code,
         "message": message,
-        "details": details
     }
+    if details is not None:
+        error_code["details"] = details
+    return error_code
 
 
 def make_log_message(level: LogLevel, message: str, details: Optional[dict[str, Any] | ErrorCode] = None) -> LogMessage:
-    """Create a standardized warning structure."""
-    return {
+    """Create a standardized log message structure."""
+    log_message: LogMessage = {
         "level": level,
         "message": message,
-        "details": details
     }
+    if details is not None:
+        log_message["details"] = details
+    return log_message
 
 
 def make_progress_data(ratio: float, current: float, total: float, unit: str, stage: Optional[str] = None, message: Optional[str] = None, eta_ms: Optional[int] = None) -> ProgressData:
@@ -176,7 +175,7 @@ def make_result_envelope(
     result_data: dict[str, Any],
     *,
     final: bool = True,
-    warnings: list[LogMessage] = []
+    messages: list[LogMessage] = []
 ) -> ResultEnvelope:
     """Create a result envelope."""
     env: ResultEnvelope = {
@@ -186,7 +185,7 @@ def make_result_envelope(
         "ts": utcnow(),
         "data": result_data,
         "final": final,
-        "warnings": warnings
+        "messages": messages
     }
     return env
 
@@ -197,7 +196,7 @@ def make_error_envelope(
     message: str,
     *,
     details: Optional[dict[str, Any]] = None,
-    warnings: list[LogMessage] = [],
+    messages: list[LogMessage] = [],
     status: Status = "failed",
     final: bool = True
 ) -> ErrorEnvelope:
@@ -210,7 +209,7 @@ def make_error_envelope(
         "ts": utcnow(),
         "error": err,
         "final": final,
-        "warnings": warnings,
+        "messages": messages,
         "status": status,
     }
     if details is not None:
@@ -229,7 +228,7 @@ def make_progress_envelope(
     eta_ms: Optional[int] = None,
     *,
     status: Status = "running",
-    warnings: list[LogMessage] = []
+    messages: list[LogMessage] = []
 ) -> ProgressEnvelope:
     progress_data: ProgressData = make_progress_data(
         ratio, current, total, unit, stage=stage, message=message, eta_ms=eta_ms)
@@ -241,7 +240,7 @@ def make_progress_envelope(
         "ts": utcnow(),
         "progress": progress_data,
         "status": status,
-        "warnings": warnings,
+        "messages": messages,
     }
 
 

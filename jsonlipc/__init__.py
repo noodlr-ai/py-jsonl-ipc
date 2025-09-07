@@ -15,6 +15,10 @@ from .envelopes import (
     LogMessage,
     ErrorCode,
 )
+from .errors import (
+    MethodNotFoundError,
+    InvalidParametersError,
+)
 
 __all__ = [
     'JSONLWorker',
@@ -31,5 +35,7 @@ __all__ = [
     'LogEnvelope',
     'ProgressEnvelope',
     'LogMessage',
-    'ErrorCode'
+    'ErrorCode',
+    'MethodNotFoundError',
+    'InvalidParametersError'
 ]

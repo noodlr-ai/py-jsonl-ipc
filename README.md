@@ -103,7 +103,11 @@ Use "notification" for:
 
 ## Testing
 
+Full test suite
 `pytest -v test_jsonl_ipc.py`
+
+Individual test
+`pytest -v test_jsonl_ipc.py::TestJSONLIPC::test_log_method`
 
 ## Pushing New Version
 
