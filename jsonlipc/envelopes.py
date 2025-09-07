@@ -175,7 +175,7 @@ def make_result_envelope(
     result_data: dict[str, Any],
     *,
     final: bool = True,
-    messages: list[LogMessage] = []
+    messages: Optional[list[LogMessage]] = None
 ) -> ResultEnvelope:
     """Create a result envelope."""
     env: ResultEnvelope = {
@@ -185,7 +185,7 @@ def make_result_envelope(
         "ts": utcnow(),
         "data": result_data,
         "final": final,
-        "messages": messages
+        "messages": messages or []
     }
     return env
 
@@ -196,7 +196,7 @@ def make_error_envelope(
     message: str,
     *,
     details: Optional[dict[str, Any]] = None,
-    messages: list[LogMessage] = [],
+    messages: Optional[list[LogMessage]] = None,
     status: Status = "failed",
     final: bool = True
 ) -> ErrorEnvelope:
@@ -209,7 +209,7 @@ def make_error_envelope(
         "ts": utcnow(),
         "error": err,
         "final": final,
-        "messages": messages,
+        "messages": messages or [],
         "status": status,
     }
     if details is not None:
@@ -228,7 +228,7 @@ def make_progress_envelope(
     eta_ms: Optional[int] = None,
     *,
     status: Status = "running",
-    messages: list[LogMessage] = []
+    messages: Optional[list[LogMessage]] = None
 ) -> ProgressEnvelope:
     progress_data: ProgressData = make_progress_data(
         ratio, current, total, unit, stage=stage, message=message, eta_ms=eta_ms)
@@ -240,7 +240,7 @@ def make_progress_envelope(
         "ts": utcnow(),
         "progress": progress_data,
         "status": status,
-        "messages": messages,
+        "messages": messages or [],
     }
 
 
