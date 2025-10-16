@@ -6,7 +6,7 @@ Shared functions for creating envelopes and error/log structures.
 from typing import TypedDict, Any, Literal, NotRequired, Optional
 from datetime import datetime, timezone
 
-EnvelopeKind = Literal["started", "progress", "result", "error", "log"]
+EnvelopeKind = Literal["progress", "result", "error", "log"]
 Status = Literal["queued", "running", "succeeded",
                  "failed", "cancelled", "retrying"]
 LogLevel = Literal["info", "error", "warn", "debug"]

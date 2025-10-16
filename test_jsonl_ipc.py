@@ -135,7 +135,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["result"] == "pong", "Ping should return 'pong'"
+        assert payload["response"] == "pong", "Ping should return 'pong'"
 
     def test_add_method(self, worker_client):
         """Test the add method."""
@@ -149,7 +149,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["result"] == 8, "5 + 3 should equal 8"
+        assert payload["sum"] == 8, "5 + 3 should equal 8"
 
     def test_echo_method(self, worker_client):
         """Test the echo method."""
@@ -165,7 +165,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["result"] == test_data, "Echo should return the same data"
+        assert payload["echo"] == test_data, "Echo should return the same data"
 
     def test_multiply_method(self, worker_client):
         """Test the multiply method."""
@@ -180,7 +180,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["result"] == 28, "4 * 7 should equal 28"
+        assert payload["product"] == 28, "4 * 7 should equal 28"
 
     def test_divide_method(self, worker_client):
         """Test the divide method."""
@@ -195,7 +195,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["result"] == 5, "15 / 3 should equal 5"
+        assert payload["quotient"] == 5, "15 / 3 should equal 5"
 
     def test_default_handler_unknown_method(self, worker_client):
         """Test the default handler with an unknown method."""
@@ -292,8 +292,8 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["result"]["status"] == "logs_sent", "Should return logs_sent status"
-        assert payload["result"]["count"] == 3, "Should have sent 3 log messages"
+        assert payload["status"] == "logs_sent", "Should return logs_sent status"
+        assert payload["count"] == 3, "Should have sent 3 log messages"
 
         # Verify log messages were sent
         assert len(
@@ -344,8 +344,8 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["result"]["status"] == "progress_complete", "Should return progress_complete status"
-        assert payload["result"][
+        assert payload["status"] == "progress_complete", "Should return progress_complete status"
+        assert payload[
             "total_steps"] == steps, f"Should have processed {steps} steps"
 
         # Verify progress messages were sent
@@ -409,7 +409,7 @@ class TestWorkerScriptValidity:
             data = response.get("data")
             assert data["final"] == True, "Final flag should be True"
             payload = data.get("data")
-            assert payload["result"] == "pong", "Ping should return 'pong'"
+            assert payload["response"] == "pong", "Ping should return 'pong'"
 
         finally:
             client.stop_worker()
@@ -493,7 +493,7 @@ class TestWorkerShutdown:
             data = response.get("data")
             assert data["final"] == True, "Final flag should be True"
             payload = data.get("data")
-            assert payload["result"] == "shutting down", "Shutdown should return 'shutting down'"
+            assert payload["status"] == "shutting down", "Shutdown should return 'shutting down'"
 
             # Wait for shutdown notification
             shutdown_event = client.get_response()
