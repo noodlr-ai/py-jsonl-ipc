@@ -54,7 +54,7 @@ class JSONLClient:
         """Send a request to the worker."""
         self.request_id += 1
         request = {
-            "id": self.request_id,
+            "id": str(self.request_id),
             "type": "request",
             "method": method,
             "params": params or {}
@@ -65,7 +65,7 @@ class JSONLClient:
             self.process.stdin.write(json_line)
             self.process.stdin.flush()
 
-        return self.request_id
+        return str(self.request_id)
 
     def get_response(self, timeout=2):
         """Get the next response from the worker."""
@@ -510,3 +510,6 @@ class TestWorkerShutdown:
 if __name__ == "__main__":
     # Run pytest when script is executed directly
     pytest.main([__file__, "-v"])
+
+
+# LEFT-OFF: pushing and tagging, switching over to fix my py-engine now...

@@ -7,7 +7,7 @@ Provides a reusable worker framework for handling JSON Lines IPC communication.
 import json
 import sys
 import signal
-from typing import Callable, Any, TypeVar, Literal, NotRequired, TypedDict, cast
+from typing import Dict, Callable, Optional, Any, TypeVar, TypeAlias, Type
 import threading
 import queue
 import time
@@ -16,6 +16,8 @@ from .errors import InvalidParametersError, MethodNotFoundError
 
 from .envelopes import (
     make_error_code,
+    make_error_envelope,
+    make_result_envelope,
     utcnow,
     ResultEnvelope,
     ErrorEnvelope,
@@ -25,35 +27,40 @@ from .envelopes import (
     ErrorCode,
 )
 
+DEFAULT_ERROR_MAP: Dict[Type[Exception], str] = {
+    ValueError: "valueError",
+    TypeError: "typeError",
+    ZeroDivisionError: "zeroDivisionError",
+    RuntimeError: "runtimeError",
+    InvalidParametersError: "invalidParameters",
+    MethodNotFoundError: "methodNotFound",
+}
 
-class RequestMessage(TypedDict):
-    """Request message with required and optional fields."""
-    type: Literal["request"]
-    id: str
-    method: str
-    params: NotRequired[dict]  # Optional field
+# Pure handler that computes and returns data
+PureHandler: TypeAlias = Callable[[str, str, dict], dict]
 
-
-class NotificationMessage(TypedDict):
-    """Notification message."""
-    type: Literal["notification"]
-    method: str
-    params: NotRequired[dict]  # Optional field
-    id: NotRequired[str]  # Optional field
+# Wrapped handler that sends its own envelopes
+HandlerFunc: TypeAlias = Callable[[str, str, dict], None]
 
 
 class JSONLWorker:
     """JSON Lines IPC Worker that can be extended with custom handlers."""
 
-    def __init__(self, request_handler: Callable[[RequestMessage | NotificationMessage], None]):
+    def __init__(self, handlers: Optional[Dict[str, PureHandler]] = None):
         """
         Initialize the worker with optional custom handlers.
 
         Args:
-            request_handler: Function to handle incoming requests.
+            handlers: Dictionary mapping method names to handler functions.
+                     Handler functions should accept (request_id, params) arguments.
         """
         self.running = True
-        self.request_handler = request_handler
+        self.handlers: Dict[str, HandlerFunc] = {
+            k: self.make_handler(v) for k, v in (handlers or {}).items()}
+
+        # Add default handlers
+        self.register_handler("ping", self._default_ping_handler)
+        self.register_handler("shutdown", self._default_shutdown_handler)
 
         # Register signal handlers for graceful shutdown
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -83,44 +90,93 @@ class JSONLWorker:
         finally:
             self.message_queue.put(None)  # Signal EOF
 
-    def _notify_shutdown(self, reason: str):
-        """
-        Notify Engine of shutdown request via synthetic message.
-        Used by both signal handlers and KeyboardInterrupt.
-        """
-        synthetic_message: RequestMessage = {
-            "type": "request",
-            "id": self.session_id,
-            "method": "shutdown",
-            "params": {"reason": reason}
-        }
+    def _default_shutdown_handler(self, _method: str, _request_id: str, _params: dict):
+        """Default shutdown handler."""
+        self.stop("Shutdown requested via IPC")
+        return {"status": "shutting down"}
 
-        try:
-            self.request_handler(synthetic_message)
-        except Exception:
-            # If Engine can't handle it, force shutdown
-            self.shutdown(f"{reason} - forced shutdown")
+    def _default_ping_handler(self, _method: str, _request_id: str, _params: dict):
+        """Default ping handler."""
+        return {"response": "pong"}
 
     def _signal_handler(self, signum, _frame):
-        """
-        Handle shutdown signals by notifying Engine via synthetic message.
-        Engine decides whether/when to call worker.shutdown().
-        """
+        """Handle shutdown signals."""
         signal_names = {signal.SIGTERM: "SIGTERM", signal.SIGINT: "SIGINT"}
         signal_name = signal_names.get(signum, f"signal {signum}")
-        self._notify_shutdown(f"Received {signal_name}")
+        self.stop(f"Received {signal_name}")
 
-    def shutdown(self, reason: str = "Shutdown requested"):
-        """
-        Public API for graceful shutdown.
-        Called by Engine when it's ready to stop.
-        """
+    def stop(self, msg: str = "Python worker stopped by parent process"):
+        """Stop the worker."""
         self.running = False
         # Note: we can add sys.exit(1) if we want to indicate an error exit on shutdown back to the parent process
 
-    def get_session_id(self) -> str:
-        """Get the current session ID."""
-        return self.session_id
+    def register_handler(
+        self,
+        method: str,
+        handler: PureHandler,
+        error_map: Dict[Type[Exception], str] | None = None
+    ):
+        """
+        Register a pure handler for a specific method.
+
+        The handler will be automatically wrapped to send results and handle errors.
+
+        Args:
+            method: The method name
+            handler: Pure function that takes (method, request_id, params) and returns dict
+            error_map: Optional custom error mapping
+        """
+        self.handlers[method] = self.make_handler(handler, error_map)
+
+    def register_raw_handler(self, method: str, handler: HandlerFunc):
+        """
+        Register a pre-wrapped handler for advanced use cases.
+
+        Handler must manage its own envelope sending.
+        Most users should use register_handler() instead.
+        """
+        self.handlers[method] = handler
+
+    def make_handler(
+        self,
+        func: PureHandler,
+        error_map: Dict[Type[Exception], str] | None = None
+    ) -> HandlerFunc:
+        """
+        Wrap a pure handler function to automatically send results and handle errors.
+
+        Most users should use register_handler() which calls this automatically.
+        """
+        error_mapping = {**DEFAULT_ERROR_MAP, **(error_map or {})}
+
+        def wrapper(method: str, request_id: str, params: dict) -> None:
+            try:
+                # LEFT-OFF: This is too limiting; it only works for sync handlers
+                # LEFT-OFF: Determining if the worker should support async itself, or if the engine should? If the engine should
+                # then it needs to know a lot about the worker's internals (e.g., send_result, send_error)
+                result = func(method, request_id, params)
+                if not isinstance(result, dict):
+                    raise TypeError(
+                        f"Handler must return dict, got {type(result).__name__}")
+                env = make_result_envelope(request_id, result)
+                self.send_result(request_id, env)
+            except Exception as e:
+                error_code = None
+                for exc_type, code in error_mapping.items():
+                    if isinstance(e, exc_type):
+                        error_code = code
+                        break
+                if error_code is None:
+                    error_code = "internalError"
+                env = make_error_envelope(request_id, error_code, str(e))
+                self.send_error(request_id, env)
+
+        return wrapper
+
+    def unregister_handler(self, method: str):
+        """Unregister a handler for a specific method."""
+        if method in self.handlers:
+            del self.handlers[method]
 
     def _send_message(self, msg: dict):
         """Send a JSON Lines message to stdout."""
@@ -226,64 +282,36 @@ class JSONLWorker:
         envelope = self._inject_seq(request_id, envelope)
         self._send_notification(request_id, method, data=envelope)
 
-    def handle_message(self, message: dict):
-        """Handle incoming message with protocol validation."""
-        # Validate basic structure
-        if not isinstance(message, dict):
-            self._send_session_error(make_error_code(
-                "invalidMessage", "Message must be a JSON object"))
-            return
+    def handle_request(self, message):
+        """Handle incoming request using registered handlers."""
+        request_id = message.get("id")
+        method = message.get("method")
+        params = message.get("params", {})
 
+        if method in self.handlers:
+            try:
+                self.handlers[method](method, request_id, params)
+                # ↑ For sync: blocks until complete, then continues
+                # ↑ For async: returns None immediately, continues
+            except Exception as e:
+                self._send_request_error(
+                    request_id, make_error_code("handleError", f"Handler error: {str(e)}"))
+        elif "default" in self.handlers:
+            # the default handler receives the method
+            self.handlers["default"](method, request_id, params)
+        else:
+            self._send_request_error(
+                request_id, make_error_code("methodNotFound", f"Method not found: {method}"))
+
+    def handle_message(self, message):
+        """Handle incoming message."""
         msg_type = message.get("type")
 
-        # Validate required fields based on type
-        if msg_type == "request":
-            if not self._validate_request(message):
-                return
-            self.request_handler(cast(RequestMessage, message))
-        elif msg_type == "notification":
-            if not self._validate_notification(message):
-                return
-            self.request_handler(cast(NotificationMessage, message))
+        if msg_type in ["request", "notification"]:
+            self.handle_request(message)
         else:
-            # Unknown type - ignore silently (could be future protocol extension)
+            # Ignore other message types
             pass
-
-    def _validate_request(self, message: dict) -> bool:
-        """Validate request message structure."""
-        if "id" not in message or not isinstance(message.get("id"), str):
-            self._send_session_error(make_error_code(
-                "invalidMessage", "Request must have string 'id' field"))
-            return False
-
-        if "method" not in message or not isinstance(message.get("method"), str):
-            request_id = message.get("id", self.session_id)
-            self._send_request_error(request_id, make_error_code(
-                "invalidMessage", "Request must have string 'method' field"))
-            return False
-
-        # params is optional, but if present must be dict
-        if "params" in message and not isinstance(message.get("params"), dict):
-            request_id = message["id"]
-            self._send_request_error(request_id, make_error_code(
-                "invalidMessage", "Request 'params' must be an object"))
-            return False
-
-        return True
-
-    def _validate_notification(self, message: dict) -> bool:
-        """Validate notification message structure."""
-        if "method" not in message or not isinstance(message.get("method"), str):
-            self._send_session_error(make_error_code(
-                "invalidMessage", "Notification must have string 'method' field"))
-            return False
-
-        if "params" in message and not isinstance(message.get("params"), dict):
-            self._send_session_error(make_error_code(
-                "invalidMessage", "Notification 'params' must be an object"))
-            return False
-
-        return True
 
     def run(self):
         """Main worker loop."""
@@ -321,7 +349,7 @@ class JSONLWorker:
                     continue  # Timeout, check self.running again
 
         except KeyboardInterrupt:
-            self._notify_shutdown("Received KeyboardInterrupt")
+            self.stop("KeyboardInterrupt")
 
         # Signal reader thread to stop
         self.running = False
