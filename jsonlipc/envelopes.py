@@ -172,7 +172,7 @@ def make_progress_data(ratio: float, current: float, total: float, unit: str, st
 
 def make_result_envelope(
     request_id: str,
-    result_data: dict[str, Any],
+    result_data: dict[str, Any] | None,
     *,
     final: bool = True,
     messages: Optional[list[LogMessage]] = None

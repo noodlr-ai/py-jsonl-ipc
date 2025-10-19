@@ -59,9 +59,9 @@ Handler = Callable[[HandlerContext], dict | None]
 
 
 class Engine:
-    def __init__(self, handlers: Optional[Dict[str, Callable]] = None):
+    def __init__(self, handlers: Optional[Dict[str, Handler]] = None):
         self.worker = JSONLWorker(self.route_request)
-        self.handlers: Dict[str, Callable] = handlers or {}
+        self.handlers: Dict[str, Handler] = handlers or {}
 
         # Engine explicitly registers shutdown handler
         self.register_handler("shutdown", self._handle_shutdown)
@@ -234,9 +234,9 @@ def handle_noop(ctx: HandlerContext) -> None:
     return None
 
 
-def handle_default(method: str, request_id: str, params: dict) -> None:
+def handle_default(ctx: HandlerContext) -> None:
     """Default handler for unrecognized methods."""
-    raise MethodNotFoundError(f"Method not found: {method}")
+    raise MethodNotFoundError(f"Method not found: {ctx.method}")
 
 
 # Create worker with initial handlers
