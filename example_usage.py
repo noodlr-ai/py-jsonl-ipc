@@ -151,7 +151,7 @@ class Engine:
         return {"response": "pong"}
 
     def run(self):
-        """Start the worker."""
+        """Start the worker. This is a blocking call, wrap functions in thread/process if needed."""
         self.worker.run()
 
 
@@ -228,10 +228,15 @@ def handle_progress(ctx: HandlerContext) -> dict:
     return {"status": "progress_complete", "total_steps": total_steps}
 
 
-def handle_default(method: str, request_id: str, params: dict) -> dict:
+def handle_noop(ctx: HandlerContext) -> None:
+    """Test handler that returns None."""
+    # This handler does nothing and returns None
+    return None
+
+
+def handle_default(method: str, request_id: str, params: dict) -> None:
     """Default handler for unrecognized methods."""
     raise MethodNotFoundError(f"Method not found: {method}")
-    return {}
 
 
 # Create worker with initial handlers
@@ -241,6 +246,7 @@ engine = Engine({
     "echo": handle_echo,
     "log": handle_log,
     "progress": handle_progress,
+    "noop": handle_noop,
     "default": handle_default,
 })
 

@@ -379,6 +379,22 @@ class TestJSONLIPC:
             assert "stage" in progress_info, "Should have stage field"
             assert "message" in progress_info, "Should have message field"
 
+    def test_noop_method(self, worker_client):
+        """Test a handler that returns None."""
+        req_id = worker_client.send_request("noop", {})
+        response = worker_client.get_response()
+
+        assert response is not None, "Should receive a response"
+        assert response.get(
+            "type") == "response", "Should be a response message"
+        assert response.get(
+            "id") == req_id, "Response ID should match request ID"
+        data = response.get("data")
+        assert data["final"] == True, "Final flag should be True"
+        payload = data.get("data")
+        # When handler returns None, the result should be None
+        assert payload is None, "Noop should return None"
+
 
 class TestWorkerScriptValidity:
     """Test class for worker script validation."""
@@ -510,6 +526,3 @@ class TestWorkerShutdown:
 if __name__ == "__main__":
     # Run pytest when script is executed directly
     pytest.main([__file__, "-v"])
-
-
-# LEFT-OFF: pushing and tagging, switching over to fix my py-engine now...

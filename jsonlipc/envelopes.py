@@ -42,7 +42,7 @@ class ResultEnvelope(TypedDict):
     request_id: str
     kind: Literal["result"]
     ts: str
-    data: dict[str, Any]
+    data: dict[str, Any] | None
     final: bool
     messages: list[LogMessage]
     # Optional properties

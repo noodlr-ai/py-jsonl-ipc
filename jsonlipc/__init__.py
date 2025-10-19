@@ -1,4 +1,9 @@
-from .worker import JSONLWorker
+from .worker import (
+    JSONLWorker,
+    RequestMessage,
+    NotificationMessage,
+)
+
 from .envelopes import (
     make_error_code,
     make_log_message,
@@ -15,6 +20,7 @@ from .envelopes import (
     LogMessage,
     ErrorCode,
 )
+
 from .errors import (
     MethodNotFoundError,
     InvalidParametersError,
@@ -37,5 +43,7 @@ __all__ = [
     'LogMessage',
     'ErrorCode',
     'MethodNotFoundError',
-    'InvalidParametersError'
+    'InvalidParametersError',
+    'RequestMessage',
+    'NotificationMessage',
 ]
