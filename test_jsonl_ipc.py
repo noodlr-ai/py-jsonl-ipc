@@ -149,7 +149,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["sum"] == 8, "5 + 3 should equal 8"
+        assert payload == 8, "5 + 3 should equal 8"
 
     def test_echo_method(self, worker_client):
         """Test the echo method."""
@@ -180,7 +180,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["product"] == 28, "4 * 7 should equal 28"
+        assert payload == 28, "4 * 7 should equal 28"
 
     def test_divide_method(self, worker_client):
         """Test the divide method."""
@@ -195,7 +195,7 @@ class TestJSONLIPC:
         data = response.get("data")
         assert data["final"] == True, "Final flag should be True"
         payload = data.get("data")
-        assert payload["quotient"] == 5, "15 / 3 should equal 5"
+        assert payload == 5, "15 / 3 should equal 5"
 
     def test_default_handler_unknown_method(self, worker_client):
         """Test the default handler with an unknown method."""

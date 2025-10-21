@@ -5,7 +5,8 @@ Shows different ways to use the worker in external modules.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Callable, Optional, TypeAlias, Type
+from typing import Dict, Callable, Optional, TypeAlias, Type, Any
+from inspect import signature, Signature, Parameter
 from jsonlipc.worker import JSONLWorker, RequestMessage, NotificationMessage
 from jsonlipc.envelopes import (
     make_log_envelope, make_log_message, make_progress_envelope,
@@ -54,14 +55,29 @@ DEFAULT_ERROR_MAP: Dict[Type[Exception], str] = {
     MethodNotFoundError: "methodNotFound",
 }
 
-# Handler type: receives context, returns result dict
-Handler = Callable[[HandlerContext], dict | None]
+# Handler type: flexible function that may or may not take context
+Handler = Callable[..., Any | None]
+
+
+@dataclass
+class HandlerInfo:
+    """Cached handler metadata to avoid runtime inspection."""
+    func: Handler
+    sig: Signature
+    expects_ctx: bool
+    param_names: set[str]
+    is_async: bool  # True if wrapped for async execution
 
 
 class Engine:
     def __init__(self, handlers: Optional[Dict[str, Handler]] = None):
         self.worker = JSONLWorker(self.route_request)
-        self.handlers: Dict[str, Handler] = handlers or {}
+        self.handlers: Dict[str, HandlerInfo] = {}
+
+        # Register initial handlers if provided
+        if handlers:
+            for method, handler in handlers.items():
+                self.register_handler(method, handler)
 
         # Engine explicitly registers shutdown handler
         self.register_handler("shutdown", self._handle_shutdown)
@@ -105,7 +121,25 @@ class Engine:
 
     def register_handler(self, method: str, handler: Callable):
         """Engine manages handler registration."""
-        self.handlers[method] = handler
+        sig = signature(handler)
+        params = sig.parameters
+
+        # Check if handler expects ctx parameter
+        expects_ctx = 'ctx' in params
+
+        # Get all parameter names (excluding ctx)
+        param_names = {name for name in params.keys()}
+
+        # For now, is_async is always False (sync execution)
+        handler_info = HandlerInfo(
+            func=handler,
+            sig=sig,
+            expects_ctx=expects_ctx,
+            param_names=param_names,
+            is_async=False
+        )
+
+        self.handlers[method] = handler_info
 
     def route_request(self, message: RequestMessage | NotificationMessage):
         """Engine's routing logic."""
@@ -123,8 +157,41 @@ class Engine:
 
         if method in self.handlers:
             try:
-                # Call handler - it returns result dict
-                result = self.handlers[method](ctx)
+                handler_info = self.handlers[method]
+
+                # Call handler with proper parameter spreading
+                try:
+                    if handler_info.expects_ctx and len(handler_info.param_names) == 1:
+                        # Function only takes ctx, don't spread params
+                        result = handler_info.func(ctx)
+                    elif handler_info.expects_ctx:
+                        # Function takes ctx + other params
+                        result = handler_info.func(**ctx.params, ctx=ctx)
+                    else:
+                        # Function doesn't take ctx, just spread params
+                        result = handler_info.func(**ctx.params)
+                except TypeError as e:
+                    # Enhance error message with parameter information
+                    required_params = [
+                        name for name, param in handler_info.sig.parameters.items()
+                        if param.default == Parameter.empty and name != 'ctx'
+                    ]
+                    provided_params = list(ctx.params.keys())
+                    missing_params = [
+                        p for p in required_params if p not in provided_params]
+                    extra_params = [
+                        p for p in provided_params if p not in handler_info.param_names]
+
+                    error_msg = f"Invalid parameters for method '{ctx.method}'"
+                    if missing_params:
+                        error_msg += f"\n  Missing required parameters: {sorted(missing_params)}"
+                    if extra_params:
+                        error_msg += f"\n  Unexpected parameters: {sorted(extra_params)}"
+                    error_msg += f"\n  Expected parameters: {sorted(handler_info.param_names - {'ctx'})}"
+                    error_msg += f"\n  Provided parameters: {sorted(provided_params)}"
+
+                    raise InvalidParametersError(error_msg) from e
+
                 # Engine automatically sends the result
                 self.worker.send_result(
                     request_id,
@@ -138,7 +205,7 @@ class Engine:
             self.worker.send_error(request_id, make_error_envelope(
                 request_id, self._get_error_code(MethodNotFoundError()), f"Method not found: {method}"))
 
-    def _handle_shutdown(self, ctx: HandlerContext):
+    def _handle_shutdown(self, reason: str = "Unknown", ctx: Optional[HandlerContext] = None):
         """Engine's shutdown handler."""
         # Tell worker to shutdown (this will trigger the shutdown notification)
         self.worker.shutdown("Shutdown requested via IPC")
@@ -146,7 +213,7 @@ class Engine:
         # Return result dict - Engine will send it automatically
         return {"status": "shutting down"}
 
-    def _handle_ping(self, ctx: HandlerContext):
+    def _handle_ping(self, ctx: Optional[HandlerContext] = None):
         """Engine's ping handler - can be customized."""
         return {"response": "pong"}
 
@@ -157,29 +224,19 @@ class Engine:
 
 # Method 1: Using function-based handlers
 
-def add(ctx: HandlerContext) -> dict:
-    a = ctx.params.get("a")
-    b = ctx.params.get("b")
-
-    if a is None or b is None:
-        raise InvalidParametersError(
-            f"Missing required parameters 'a' and 'b'")
-
+def add(a: float, b: float, ctx: Optional[HandlerContext] = None) -> float:
     if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
         raise InvalidParametersError(f"Parameters 'a' and 'b' must be numbers")
 
-    return {"sum": a + b}
+    return a + b
 
 
-def multiply(ctx: HandlerContext) -> dict:
+def multiply(a: float = 1, b: float = 1, ctx: Optional[HandlerContext] = None) -> float:
     """Multiply two numbers."""
-    a = ctx.params.get("a", 1)
-    b = ctx.params.get("b", 1)
-
     if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
         raise TypeError("Parameters 'a' and 'b' must be numbers")
 
-    return {"product": a * b}
+    return a * b
 
 
 def handle_echo(ctx: HandlerContext) -> dict:
@@ -206,29 +263,29 @@ def handle_log(ctx: HandlerContext) -> dict:
     return {"status": "logs_sent", "count": len(messages)}
 
 
-def handle_progress(ctx: HandlerContext) -> dict:
+def handle_progress(steps: int = 5, delay: float = 0.1, ctx: Optional[HandlerContext] = None) -> dict:
     """Test handler that sends progress updates."""
     import time
 
-    total_steps = ctx.params.get("steps", 5)
-    delay = ctx.params.get("delay", 0.1)
+    total_steps = steps
 
-    for i in range(total_steps + 1):
-        ctx.send_progress(
-            ratio=i / total_steps,
-            current=float(i),
-            total=float(total_steps),
-            unit="steps",
-            stage=f"step_{i}",
-            message=f"Processing step {i} of {total_steps}"
-        )
-        if i < total_steps:
-            time.sleep(delay)
+    if ctx:
+        for i in range(total_steps + 1):
+            ctx.send_progress(
+                ratio=i / total_steps,
+                current=float(i),
+                total=float(total_steps),
+                unit="steps",
+                stage=f"step_{i}",
+                message=f"Processing step {i} of {total_steps}"
+            )
+            if i < total_steps:
+                time.sleep(delay)
 
     return {"status": "progress_complete", "total_steps": total_steps}
 
 
-def handle_noop(ctx: HandlerContext) -> None:
+def handle_noop(ctx: Optional[HandlerContext] = None) -> None:
     """Test handler that returns None."""
     # This handler does nothing and returns None
     return None
@@ -253,18 +310,15 @@ engine = Engine({
 # Method 2: Registering handlers after creation
 
 
-def divide(ctx: HandlerContext) -> dict:
+def divide(a: float = 0, b: float = 1, ctx: Optional[HandlerContext] = None) -> float:
     """Divide two numbers."""
-    a = ctx.params.get("a", 0)
-    b = ctx.params.get("b", 1)
-
     if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
         raise TypeError("Parameters 'a' and 'b' must be numbers")
 
     if b == 0:
         raise ZeroDivisionError("Division by zero")
 
-    return {"quotient": a / b}
+    return a / b
 
 
 engine.register_handler("divide", divide)
