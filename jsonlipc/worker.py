@@ -74,10 +74,9 @@ class JSONLWorker:
         """Read from stdin in a separate thread."""
         try:
             for line in sys.stdin:
+                line = line.strip()  # Expecting to receive JSON Lines, remove trailing newline
                 if line:
-                    self.message_queue.put(line.strip())
-                else:
-                    break
+                    self.message_queue.put(line)
         except:
             pass
         finally:
@@ -303,9 +302,6 @@ class JSONLWorker:
 
                     if line is None:  # EOF/shutdown signal
                         break
-
-                    if not line:
-                        continue
 
                     try:
                         msg = json.loads(line)
