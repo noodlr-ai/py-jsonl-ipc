@@ -318,14 +318,24 @@ class JSONLWorker:
 
         except KeyboardInterrupt:
             self._notify_shutdown("Received KeyboardInterrupt")
+        except Exception as e:
+            try:
+                self._send_session_error(make_error_code(
+                    "internalError", f"Internal error: {e}"))
+            except:
+                pass
+            # Exit with error code so parent knows something is wrong
+            sys.exit(1)
 
-        # Signal reader thread to stop
-        self.running = False
+        finally:
 
-        # Optional: wait briefly for thread cleanup
-        # Note: there is a race condition in the thread where it needs to receive a message to then check if it should stop; therefore,
-        # we let the daemon thread be cleaned up automatically
-        # if self.reader_thread and self.reader_thread.is_alive():
-        #     self.reader_thread.join(timeout=0.5)
+            # Signal reader thread to stop
+            self.running = False
 
-        self._send_notification(self.session_id, "shutdown")
+            # Optional: wait briefly for thread cleanup
+            # Note: there is a race condition in the thread where it needs to receive a message to then check if it should stop; therefore,
+            # we let the daemon thread be cleaned up automatically
+            # if self.reader_thread and self.reader_thread.is_alive():
+            #     self.reader_thread.join(timeout=0.5)
+
+            self._send_notification(self.session_id, "shutdown")
