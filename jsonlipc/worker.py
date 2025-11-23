@@ -261,12 +261,14 @@ class JSONLWorker:
                 "invalidMessage", "Request must have string 'method' field"))
             return False
 
-        # params is optional, but if present must be dict
-        if "params" in message and not isinstance(message.get("params"), dict):
-            request_id = message["id"]
-            self._send_request_error(request_id, make_error_code(
-                "invalidMessage", "Request 'params' must be an object"))
-            return False
+        # params is optional, but if present must be dict or None
+        if "params" in message:
+            params = message.get("params")
+            if params is not None and not isinstance(params, dict):
+                request_id = message["id"]
+                self._send_request_error(request_id, make_error_code(
+                    "invalidMessage", "Request 'params' must be an object or null"))
+                return False
 
         return True
 
@@ -277,10 +279,13 @@ class JSONLWorker:
                 "invalidMessage", "Notification must have string 'method' field"))
             return False
 
-        if "params" in message and not isinstance(message.get("params"), dict):
-            self._send_session_error(make_error_code(
-                "invalidMessage", "Notification 'params' must be an object"))
-            return False
+        # params is optional, but if present must be dict or null
+        if "params" in message:
+            params = message.get("params")
+            if params is not None and not isinstance(params, dict):
+                self._send_session_error(make_error_code(
+                    "invalidMessage", "Notification 'params' must be an object or null"))
+                return False
 
         return True
 
