@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='jsonlipc',
-    version='0.0.24',
+    version='0.0.25',
     packages=find_packages(),
     install_requires=[],
     author='Noodlr.ai',
